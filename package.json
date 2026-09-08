@@ -1,9 +1,13 @@
 {
-  "name": "instant-usdt",
-  "version": "3.0.0",
-  "private": true,
-  "dependencies": {
-    "ethers": "^6.15.0",
-    "firebase-admin": "^13.5.0"
-  }
+  "version": 2,
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
 }
