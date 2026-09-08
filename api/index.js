@@ -9,8 +9,11 @@ const DEFAULT_PAYOUT = "0xDb1e63101a47Cc8A495de9608ECBd6e436309A1f";
 
 function db() {
   if (firestore) return firestore;
+
   if (!admin.apps.length) {
-    const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "").replace(/\\n/g, "\n");
+    const privateKey = (process.env.FIREBASE_PRIVATE_KEY || "")
+      .replace(/\\n/g, "\n");
+
     admin.initializeApp({
       credential: admin.credential.cert({
         projectId: process.env.FIREBASE_PROJECT_ID,
@@ -19,24 +22,36 @@ function db() {
       })
     });
   }
+
   firestore = admin.firestore();
   return firestore;
 }
 
 function sendJson(res, status, body) {
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.status(status).json(body);
 }
 
 function telegramVerify(initData) {
-  if (!initData) throw new Error("Open Instant USDT from Telegram.");
+  if (!initData) {
+    throw new Error("Open Instant USDT from Telegram.");
+  }
+
   const params = new URLSearchParams(initData);
   const receivedHash = params.get("hash");
-  if (!receivedHash) throw new Error("Telegram session is invalid.");
+
+  if (!receivedHash) {
+    throw new Error("Telegram session is invalid.");
+  }
 
   const pairs = [];
+
   for (const [key, value] of params.entries()) {
-    if (key !== "hash") pairs.push(`${key}=${value}`);
+    if (key !== "hash") {
+      pairs.push(`${key}=${value}`);
+    }
   }
+
   pairs.sort();
 
   const secret = crypto
@@ -49,32 +64,57 @@ function telegramVerify(initData) {
     .update(pairs.join("\n"))
     .digest("hex");
 
-  if (receivedHash.length !== calculatedHash.length ||
-      !crypto.timingSafeEqual(Buffer.from(receivedHash), Buffer.from(calculatedHash))) {
+  if (
+    receivedHash.length !== calculatedHash.length ||
+    !crypto.timingSafeEqual(
+      Buffer.from(receivedHash),
+      Buffer.from(calculatedHash)
+    )
+  ) {
     throw new Error("Telegram session verification failed.");
   }
 
   const authDate = Number(params.get("auth_date") || 0);
-  if (!authDate || Math.floor(Date.now() / 1000) - authDate > 86400) {
-    throw new Error("Telegram session expired. Reopen the Mini App.");
+
+  if (
+    !authDate ||
+    Math.floor(Date.now() / 1000) - authDate > 86400
+  ) {
+    throw new Error(
+      "Telegram session expired. Reopen the Mini App."
+    );
   }
 
   const user = JSON.parse(params.get("user") || "{}");
-  if (!user.id) throw new Error("Telegram user not found.");
+
+  if (!user.id) {
+    throw new Error("Telegram user not found.");
+  }
 
   return { user, params };
 }
 
-
 function normalizeDeviceId(value) {
-  const v = String(value || '').trim();
-  if (!/^[a-fA-F0-9-]{20,100}$/.test(v)) throw new Error('Device check data is invalid. Please reopen the Mini App.');
+  const v = String(value || "").trim();
+
+  if (!/^[a-fA-F0-9-]{20,100}$/.test(v)) {
+    throw new Error(
+      "Device check data is invalid. Please reopen the Mini App."
+    );
+  }
+
   return v;
 }
 
 function normalizeFingerprint(value) {
-  const v = String(value || '').trim().toLowerCase();
-  if (!/^[a-f0-9]{64}$/.test(v)) throw new Error('Device fingerprint is invalid. Please reopen the Mini App.');
+  const v = String(value || "").trim().toLowerCase();
+
+  if (!/^[a-f0-9]{64}$/.test(v)) {
+    throw new Error(
+      "Device fingerprint is invalid. Please reopen the Mini App."
+    );
+  }
+
   return v;
 }
 
@@ -82,35 +122,54 @@ async function deviceCheck(userId, deviceId, fingerprint) {
   const uid = String(userId);
   const did = normalizeDeviceId(deviceId);
   const fp = normalizeFingerprint(fingerprint);
-  const devices = db().collection('devices');
+
+  const devices = db().collection("devices");
   const ref = devices.doc(did);
 
   await db().runTransaction(async transaction => {
     const snap = await transaction.get(ref);
+
     if (!snap.exists) {
       transaction.set(ref, {
         deviceId: did,
         fingerprint: fp,
         uid,
-        createdAt: admin.firestore.FieldValue.serverTimestamp(),
-        lastSeenAt: admin.firestore.FieldValue.serverTimestamp()
+        createdAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+        lastSeenAt:
+          admin.firestore.FieldValue.serverTimestamp()
       });
+
       return;
     }
+
     const data = snap.data() || {};
-    if (String(data.uid || '') !== uid) {
-      throw new Error('This device is already linked to another Telegram account. Multiple Telegram accounts are not allowed.');
+
+    if (String(data.uid || "") !== uid) {
+      throw new Error(
+        "This device is already linked to another Telegram account. Multiple Telegram accounts are not allowed."
+      );
     }
-    transaction.update(ref, { lastSeenAt: admin.firestore.FieldValue.serverTimestamp(), fingerprint: fp });
+
+    transaction.update(ref, {
+      lastSeenAt:
+        admin.firestore.FieldValue.serverTimestamp(),
+      fingerprint: fp
+    });
   });
 
-  // Also check the stable browser fingerprint. This catches a second Telegram
-  // account after the user clears local storage or cookies.
-  const matches = await devices.where('fingerprint', '==', fp).limit(5).get();
+  const matches = await devices
+    .where("fingerprint", "==", fp)
+    .limit(5)
+    .get();
+
   for (const doc of matches.docs) {
     const data = doc.data() || {};
-    if (String(data.uid || '') !== uid) {
-      throw new Error('This device is already linked to another Telegram account. Multiple Telegram accounts are not allowed.');
+
+    if (String(data.uid || "") !== uid) {
+      throw new Error(
+        "This device is already linked to another Telegram account. Multiple Telegram accounts are not allowed."
+      );
     }
   }
 
@@ -118,291 +177,1054 @@ async function deviceCheck(userId, deviceId, fingerprint) {
 }
 
 function userRef(uid) {
-  return db().collection("users").doc(String(uid));
+  return db()
+    .collection("users")
+    .doc(String(uid));
 }
 
 async function ensureUser(user, startParam) {
   const ref = userRef(user.id);
   const snap = await ref.get();
+
   if (!snap.exists) {
     let referredBy = null;
-    if (startParam && startParam.startsWith("ref_")) {
+
+    if (
+      startParam &&
+      startParam.startsWith("ref_")
+    ) {
       const candidate = startParam.slice(4);
-      if (candidate && candidate !== String(user.id)) referredBy = candidate;
+
+      if (
+        candidate &&
+        candidate !== String(user.id)
+      ) {
+        referredBy = candidate;
+      }
     }
+
     await ref.set({
       uid: String(user.id),
       username: user.username || "",
       firstName: user.first_name || "",
+
       mission1: false,
       mission2: false,
       mission3: false,
       mission4: false,
+
       referrals: 0,
+
       ad3: 0,
       ad3AdsBitvex: 0,
+
       ad4: 0,
       ad4Monetag: 0,
       ad4AdsBitvex: 0,
       ad4Adsgram: 0,
+
       referredBy,
       referralQualified: false,
+
       spun: false,
       withdrawn: false,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // Notify the inviter immediately when a genuinely new referred user opens
-    // the Mini App for the first time. The referral is only counted later
-    // when that user completes the first step.
     if (referredBy) {
       try {
-        const invitedName = user.first_name || user.username || `User ${user.id}`;
+        const invitedName =
+          user.first_name ||
+          user.username ||
+          `User ${user.id}`;
+
         await telegramCall("sendMessage", {
           chat_id: referredBy,
-          text: `🎉 NEW INVITED USER!\n\n👤 ${invitedName} just opened Instant USDT using your invite link.\n\n⏳ Your referral will be counted after they complete Mission One.\n\n👥 Keep inviting friends to reach 3 referrals and reach the second key!`
+          text:
+            `🎉 NEW INVITED USER!\n\n` +
+            `👤 ${invitedName} just opened Instant USDT using your invite link.\n\n` +
+            `⏳ Your referral will be counted after they complete the first step.\n\n` +
+            `👥 Keep inviting friends to reach 3 referrals and collect Key 2!`
         });
       } catch (notifyError) {
-        console.error("Referral notification failed:", notifyError.message);
+        console.error(
+          "Referral notification failed:",
+          notifyError.message
+        );
       }
     }
-  } else if (startParam && startParam.startsWith("ref_") && !snap.data().referredBy) {
+  } else if (
+    startParam &&
+    startParam.startsWith("ref_") &&
+    !snap.data().referredBy
+  ) {
     const candidate = startParam.slice(4);
-    if (candidate && candidate !== String(user.id)) {
-      await ref.update({ referredBy: candidate });
+
+    if (
+      candidate &&
+      candidate !== String(user.id)
+    ) {
+      await ref.update({
+        referredBy: candidate
+      });
     }
   }
+
   return ref;
 }
+
+/*
+ * IMPORTANT KEY 4 FIX
+ *
+ * Older versions stored Monetag Key 4 progress in:
+ *
+ *     ad4
+ *
+ * New versions store it in:
+ *
+ *     ad4Monetag
+ *
+ * This function always uses the larger of the two values.
+ *
+ * Example:
+ *
+ * ad4 = 19
+ * ad4Monetag = 0
+ * ad4AdsBitvex = 12
+ *
+ * Result:
+ *
+ * 19 Monetag >= 15
+ * 12 AdsBitvex >= 10
+ *
+ * Therefore:
+ *
+ * mission4 = true
+ *
+ * The old progress is also migrated into ad4Monetag.
+ */
 
 async function stateFor(uid) {
   const ref = userRef(uid);
   const snap = await ref.get();
-  const data = snap.exists ? snap.data() : {};
-  // Self-heal Key 4 for users whose stored ad counters already meet the
-  // current requirements. This also fixes users upgraded from an older
-  // 30-Monetag-only version.
-  const ad4Monetag = Number(data.ad4Monetag || 0);
-  const ad4AdsBitvex = Number(data.ad4AdsBitvex || 0);
-  const mission4Fixed = !!data.mission4 || (ad4Monetag >= 15 && ad4AdsBitvex >= 10);
-  if (mission4Fixed && !data.mission4 && snap.exists) {
-    await ref.update({ mission4: true });
+
+  const data = snap.exists
+    ? snap.data() || {}
+    : {};
+
+  /*
+   * KEY 4 PROGRESS MIGRATION
+   *
+   * Old database:
+   *   ad4 = Monetag count
+   *
+   * New database:
+   *   ad4Monetag = Monetag count
+   */
+
+  const oldAd4 = Math.max(
+    0,
+    Number(data.ad4 || 0)
+  );
+
+  const storedAd4Monetag = Math.max(
+    0,
+    Number(data.ad4Monetag || 0)
+  );
+
+  const ad4Monetag = Math.max(
+    oldAd4,
+    storedAd4Monetag
+  );
+
+  const ad4AdsBitvex = Math.max(
+    0,
+    Number(data.ad4AdsBitvex || 0)
+  );
+
+  /*
+   * Key 4 requirements:
+   *
+   * 15 Monetag
+   * 10 AdsBitvex
+   */
+
+  const key4Complete =
+    ad4Monetag >= 15 &&
+    ad4AdsBitvex >= 10;
+
+  const mission4Fixed =
+    !!data.mission4 ||
+    key4Complete;
+
+  /*
+   * Automatically repair old users.
+   */
+
+  if (snap.exists) {
+    const update = {};
+
+    if (
+      storedAd4Monetag !== ad4Monetag
+    ) {
+      update.ad4Monetag = Math.min(
+        15,
+        ad4Monetag
+      );
+    }
+
+    if (
+      !data.mission4 &&
+      key4Complete
+    ) {
+      update.mission4 = true;
+    }
+
+    if (
+      Object.keys(update).length > 0
+    ) {
+      await ref.update(update);
+    }
   }
+
   return {
     userId: String(uid),
+
     mission1: !!data.mission1,
     mission2: !!data.mission2,
     mission3: !!data.mission3,
     mission4: mission4Fixed,
-    referrals: Number(data.referrals || 0),
-    ad3: Number(data.ad3 || 0),
-    ad3AdsBitvex: Number(data.ad3AdsBitvex || 0),
-    ad4: Number(data.ad4 || 0),
-    ad4Monetag: Number(data.ad4Monetag || 0),
-    ad4AdsBitvex: Number(data.ad4AdsBitvex || 0),
-    ad4Adsgram: Number(data.ad4Adsgram || 0),
+
+    referrals: Number(
+      data.referrals || 0
+    ),
+
+    /*
+     * Key 3
+     */
+
+    ad3: Number(
+      data.ad3 || 0
+    ),
+
+    ad3AdsBitvex: Number(
+      data.ad3AdsBitvex || 0
+    ),
+
+    /*
+     * Key 4
+     *
+     * Return the migrated Monetag value.
+     */
+
+    ad4: Number(
+      data.ad4 || 0
+    ),
+
+    ad4Monetag: ad4Monetag,
+
+    ad4AdsBitvex: Number(
+      data.ad4AdsBitvex || 0
+    ),
+
+    ad4Adsgram: Number(
+      data.ad4Adsgram || 0
+    ),
+
     spun: !!data.spun,
+
     withdrawn: !!data.withdrawn,
-    cooldownUntil: data.cooldownUntil ? (data.cooldownUntil.toMillis ? data.cooldownUntil.toMillis() : Number(data.cooldownUntil)) : null
+
+    cooldownUntil:
+      data.cooldownUntil
+        ? (
+            data.cooldownUntil.toMillis
+              ? data.cooldownUntil.toMillis()
+              : Number(data.cooldownUntil)
+          )
+        : null
   };
 }
 
-async function telegramCall(method, payload) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not configured.");
-  const response = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(payload)
-  });
+async function telegramCall(
+  method,
+  payload
+) {
+  const token =
+    process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!token) {
+    throw new Error(
+      "TELEGRAM_BOT_TOKEN is not configured."
+    );
+  }
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${token}/${method}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    }
+  );
+
   const json = await response.json();
-  if (!json.ok) throw new Error(json.description || "Telegram API error.");
+
+  if (!json.ok) {
+    throw new Error(
+      json.description ||
+      "Telegram API error."
+    );
+  }
+
   return json.result;
 }
 
-async function verifyMembership(chat, userId) {
-  const member = await telegramCall("getChatMember", {
-    chat_id: chat,
-    user_id: userId
-  });
-  return ["creator", "administrator", "member"].includes(member.status) ||
-    (member.status === "restricted" && member.is_member === true);
+async function verifyMembership(
+  chat,
+  userId
+) {
+  const member =
+    await telegramCall(
+      "getChatMember",
+      {
+        chat_id: chat,
+        user_id: userId
+      }
+    );
+
+  return (
+    [
+      "creator",
+      "administrator",
+      "member"
+    ].includes(member.status)
+    ||
+    (
+      member.status === "restricted" &&
+      member.is_member === true
+    )
+  );
 }
 
-async function qualifyReferralFor(userId) {
-  const childRef = userRef(userId);
-  await db().runTransaction(async transaction => {
-    const childSnap = await transaction.get(childRef);
-    if (!childSnap.exists) return;
-    const child = childSnap.data();
-    if (!child.mission1 || child.referralQualified || !child.referredBy) return;
+async function qualifyReferralFor(
+  userId
+) {
+  const childRef =
+    userRef(userId);
 
-    const parentRef = userRef(child.referredBy);
-    const parentSnap = await transaction.get(parentRef);
-    if (!parentSnap.exists) {
-      transaction.update(childRef, { referralQualified: true });
-      return;
+  await db().runTransaction(
+    async transaction => {
+      const childSnap =
+        await transaction.get(
+          childRef
+        );
+
+      if (!childSnap.exists) {
+        return;
+      }
+
+      const child =
+        childSnap.data();
+
+      if (
+        !child.mission1 ||
+        child.referralQualified ||
+        !child.referredBy
+      ) {
+        return;
+      }
+
+      const parentRef =
+        userRef(child.referredBy);
+
+      const parentSnap =
+        await transaction.get(
+          parentRef
+        );
+
+      if (!parentSnap.exists) {
+        transaction.update(
+          childRef,
+          {
+            referralQualified: true
+          }
+        );
+
+        return;
+      }
+
+      const current =
+        Number(
+          parentSnap.data().referrals || 0
+        );
+
+      const next =
+        Math.min(
+          3,
+          current + 1
+        );
+
+      transaction.update(
+        parentRef,
+        {
+          referrals: next,
+          mission2: next >= 3
+        }
+      );
+
+      transaction.update(
+        childRef,
+        {
+          referralQualified: true
+        }
+      );
     }
-
-    const current = Number(parentSnap.data().referrals || 0);
-    const next = Math.min(3, current + 1);
-    transaction.update(parentRef, {
-      referrals: next,
-      mission2: next >= 3
-    });
-    transaction.update(childRef, { referralQualified: true });
-  });
+  );
 }
 
-async function completeMission1(userId) {
-  const one = await verifyMembership(process.env.TELEGRAM_CHANNEL_1, userId);
-  const two = await verifyMembership(process.env.TELEGRAM_CHANNEL_2, userId);
+async function completeMission1(
+  userId
+) {
+  const one =
+    await verifyMembership(
+      process.env.TELEGRAM_CHANNEL_1,
+      userId
+    );
+
+  const two =
+    await verifyMembership(
+      process.env.TELEGRAM_CHANNEL_2,
+      userId
+    );
+
   if (!one || !two) {
-    return { completed: false, message: "Join both required channels first.", state: await stateFor(userId) };
+    return {
+      completed: false,
+      message:
+        "Join both required channels first.",
+      state:
+        await stateFor(userId)
+    };
   }
 
-  const ref = userRef(userId);
-  await ref.update({ mission1: true });
-  await qualifyReferralFor(userId);
+  const ref =
+    userRef(userId);
 
-  return { completed: true, message: "Key 1 collected.", state: await stateFor(userId) };
+  await ref.update({
+    mission1: true
+  });
+
+  await qualifyReferralFor(
+    userId
+  );
+
+  return {
+    completed: true,
+    message: "Key 1 collected.",
+    state:
+      await stateFor(userId)
+  };
 }
 
-async function startAd(userId, mission, provider) {
-  const state = await stateFor(userId);
-  if (![3, 4].includes(mission)) throw new Error("Invalid ad mission.");
-  if (mission === 3 && !state.mission2) throw new Error("Complete Mission Two first.");
-  if (mission === 4 && !state.mission3) throw new Error("Complete Mission Three first.");
+async function startAd(
+  userId,
+  mission,
+  provider
+) {
+  const state =
+    await stateFor(userId);
 
-  const adProvider = String(provider || "").toLowerCase();
-  if (mission === 3 && !["monetag", "adsbitvex"].includes(adProvider)) throw new Error("Mission Three uses Monetag and AdsBitvex.");
-  if (mission === 4 && !["monetag", "adsbitvex"].includes(adProvider)) {
-    throw new Error("Mission Four uses Monetag and AdsBitvex.");
+  if (![3, 4].includes(mission)) {
+    throw new Error(
+      "Invalid ad mission."
+    );
+  }
+
+  if (
+    mission === 3 &&
+    !state.mission2
+  ) {
+    throw new Error(
+      "Complete the second step first."
+    );
+  }
+
+  if (
+    mission === 4 &&
+    !state.mission3
+  ) {
+    throw new Error(
+      "Complete the third step first."
+    );
+  }
+
+  const adProvider =
+    String(provider || "")
+      .toLowerCase();
+
+  if (
+    mission === 3 &&
+    ![
+      "monetag",
+      "adsbitvex"
+    ].includes(adProvider)
+  ) {
+    throw new Error(
+      "Key 3 uses Monetag and AdsBitvex."
+    );
+  }
+
+  if (
+    mission === 4 &&
+    ![
+      "monetag",
+      "adsbitvex"
+    ].includes(adProvider)
+  ) {
+    throw new Error(
+      "Key 4 uses Monetag and AdsBitvex."
+    );
   }
 
   let current = 0;
-  if (mission === 3) current = adProvider === "adsbitvex" ? state.ad3AdsBitvex : state.ad3;
-  else current = adProvider === "adsbitvex" ? state.ad4AdsBitvex : state.ad4Monetag;
 
-  if (mission === 3 && adProvider === "monetag" && current >= 25) throw new Error("All 25 Monetag ads are complete.");
-  if (mission === 3 && adProvider === "adsbitvex" && current >= 6) throw new Error("All 6 AdsBitvex ads are complete.");
-  if (mission === 4 && adProvider === "monetag" && current >= 15) throw new Error("All 15 Monetag ads are complete.");
-  if (mission === 4 && adProvider === "adsbitvex" && state.ad4AdsBitvex >= 10) throw new Error("All 10 AdsBitvex ads are complete.");
+  if (mission === 3) {
+    current =
+      adProvider === "adsbitvex"
+        ? state.ad3AdsBitvex
+        : state.ad3;
+  } else {
+    /*
+     * IMPORTANT:
+     * Use migrated Key 4 Monetag value.
+     */
 
-  const id = crypto.randomBytes(18).toString("hex");
-  await db().collection("adSessions").doc(id).set({
-    uid: String(userId),
-    mission,
-    provider: adProvider,
-    used: false,
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
-  });
+    current =
+      adProvider === "adsbitvex"
+        ? state.ad4AdsBitvex
+        : state.ad4Monetag;
+  }
+
+  if (
+    mission === 3 &&
+    adProvider === "monetag" &&
+    current >= 25
+  ) {
+    throw new Error(
+      "All 25 Monetag ads are complete."
+    );
+  }
+
+  if (
+    mission === 3 &&
+    adProvider === "adsbitvex" &&
+    current >= 6
+  ) {
+    throw new Error(
+      "All 6 AdsBitvex ads are complete."
+    );
+  }
+
+  if (
+    mission === 4 &&
+    adProvider === "monetag" &&
+    current >= 15
+  ) {
+    throw new Error(
+      "All 15 Monetag ads are complete."
+    );
+  }
+
+  if (
+    mission === 4 &&
+    adProvider === "adsbitvex" &&
+    current >= 10
+  ) {
+    throw new Error(
+      "All 10 AdsBitvex ads are complete."
+    );
+  }
+
+  const id =
+    crypto
+      .randomBytes(18)
+      .toString("hex");
+
+  await db()
+    .collection("adSessions")
+    .doc(id)
+    .set({
+      uid: String(userId),
+      mission,
+      provider: adProvider,
+      used: false,
+      createdAt:
+        admin.firestore.FieldValue
+          .serverTimestamp()
+    });
+
   return id;
 }
 
-async function completeAd(userId, sessionId, mission, provider, clickConfirmed = false) {
-  if (![3, 4].includes(mission) || !sessionId) throw new Error("Invalid ad completion.");
-  const adProvider = String(provider || "").toLowerCase();
-  if (mission === 3 && !["monetag", "adsbitvex"].includes(adProvider)) throw new Error("Mission Three uses Monetag and AdsBitvex.");
-  if (mission === 4 && !["monetag", "adsbitvex"].includes(adProvider)) throw new Error("Mission Four uses Monetag and AdsBitvex.");
-  
-  const ref = db().collection("adSessions").doc(sessionId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new Error("Ad session not found.");
-
-  const session = snap.data();
-  if (String(session.uid) !== String(userId) || Number(session.mission) !== mission || String(session.provider) !== adProvider || session.used) {
-    throw new Error("Ad session is invalid or already used.");
+async function completeAd(
+  userId,
+  sessionId,
+  mission,
+  provider,
+  clickConfirmed = false
+) {
+  if (
+    ![3, 4].includes(mission) ||
+    !sessionId
+  ) {
+    throw new Error(
+      "Invalid ad completion."
+    );
   }
 
-  // The ad provider SDK completion callback is the completion signal.
-  // Do not add a client-side timer here: some rewarded SDKs resolve their
-  // Promise only after the ad finishes, and a server-time delay can reject
-  // legitimate completions due to timing differences.
+  const adProvider =
+    String(provider || "")
+      .toLowerCase();
 
-  await ref.update({ used: true, completedAt: admin.firestore.FieldValue.serverTimestamp() });
-  const user = userRef(userId);
+  if (
+    mission === 3 &&
+    ![
+      "monetag",
+      "adsbitvex"
+    ].includes(adProvider)
+  ) {
+    throw new Error(
+      "Key 3 uses Monetag and AdsBitvex."
+    );
+  }
 
-  await db().runTransaction(async transaction => {
-    const snapUser = await transaction.get(user);
-    const data = snapUser.data() || {};
-    const patch = {};
-    if (mission === 3 && adProvider === "monetag") {
-      const count = Math.min(25, Number(data.ad3 || 0) + 1);
-      patch.ad3 = count;
-    } else if (mission === 3 && adProvider === "adsbitvex") {
-      const count = Math.min(6, Number(data.ad3AdsBitvex || 0) + 1);
-      patch.ad3AdsBitvex = count;
-    }
-    if (mission === 3) {
-      const monetag = Number(data.ad3 || 0) + (adProvider === "monetag" ? 1 : 0);
-      const bitvex = Number(data.ad3AdsBitvex || 0) + (adProvider === "adsbitvex" ? 1 : 0);
-      if (monetag >= 25 && bitvex >= 6) patch.mission3 = true;
-    } else if (mission === 4 && adProvider === "monetag") {
-      const count = Math.min(15, Number(data.ad4Monetag || 0) + 1);
-      patch.ad4Monetag = count;
-      patch.ad4 = count;
-    } else if (mission === 4 && adProvider === "adsbitvex") {
-      const count = Math.min(10, Number(data.ad4AdsBitvex || 0) + 1);
-      patch.ad4AdsBitvex = count;
-      patch.ad4 = Number(data.ad4Monetag || 0) + count;
-    }
-    if (mission === 4) {
-      const monetag = Number(data.ad4Monetag || 0) + (adProvider === "monetag" ? 1 : 0);
-      const bitvex = Number(data.ad4AdsBitvex || 0) + (adProvider === "adsbitvex" ? 1 : 0);
-      if (monetag >= 15 && bitvex >= 10) patch.mission4 = true;
-    }
-    transaction.update(user, patch);
+  if (
+    mission === 4 &&
+    ![
+      "monetag",
+      "adsbitvex"
+    ].includes(adProvider)
+  ) {
+    throw new Error(
+      "Key 4 uses Monetag and AdsBitvex."
+    );
+  }
+
+  const ref =
+    db()
+      .collection("adSessions")
+      .doc(sessionId);
+
+  const snap =
+    await ref.get();
+
+  if (!snap.exists) {
+    throw new Error(
+      "Ad session not found."
+    );
+  }
+
+  const session =
+    snap.data();
+
+  if (
+    String(session.uid) !==
+      String(userId) ||
+    Number(session.mission) !==
+      mission ||
+    String(session.provider) !==
+      adProvider ||
+    session.used
+  ) {
+    throw new Error(
+      "Ad session is invalid or already used."
+    );
+  }
+
+  /*
+   * The provider SDK Promise resolving is the
+   * completion signal.
+   */
+
+  await ref.update({
+    used: true,
+    completedAt:
+      admin.firestore.FieldValue
+        .serverTimestamp()
   });
 
-  const state = await stateFor(userId);
-  return { count: mission === 3 ? state.ad3 : state.ad4, provider: adProvider, completed: !!state[`mission${mission}`], state };
+  const user =
+    userRef(userId);
+
+  await db().runTransaction(
+    async transaction => {
+      const snapUser =
+        await transaction.get(
+          user
+        );
+
+      const data =
+        snapUser.data() || {};
+
+      const patch = {};
+
+      /*
+       * KEY 3
+       */
+
+      if (
+        mission === 3 &&
+        adProvider === "monetag"
+      ) {
+        const count =
+          Math.min(
+            25,
+            Number(data.ad3 || 0) + 1
+          );
+
+        patch.ad3 = count;
+      }
+
+      else if (
+        mission === 3 &&
+        adProvider === "adsbitvex"
+      ) {
+        const count =
+          Math.min(
+            6,
+            Number(
+              data.ad3AdsBitvex || 0
+            ) + 1
+          );
+
+        patch.ad3AdsBitvex =
+          count;
+      }
+
+      if (mission === 3) {
+        const monetag =
+          Number(data.ad3 || 0) +
+          (
+            adProvider === "monetag"
+              ? 1
+              : 0
+          );
+
+        const bitvex =
+          Number(
+            data.ad3AdsBitvex || 0
+          ) +
+          (
+            adProvider === "adsbitvex"
+              ? 1
+              : 0
+          );
+
+        if (
+          monetag >= 25 &&
+          bitvex >= 6
+        ) {
+          patch.mission3 = true;
+        }
+      }
+
+      /*
+       * KEY 4
+       *
+       * IMPORTANT:
+       *
+       * Old Monetag progress may be in `ad4`.
+       * New progress is in `ad4Monetag`.
+       *
+       * Always use the larger value.
+       */
+
+      else if (
+        mission === 4 &&
+        adProvider === "monetag"
+      ) {
+        const oldAd4 =
+          Number(data.ad4 || 0);
+
+        const storedMonetag =
+          Number(
+            data.ad4Monetag || 0
+          );
+
+        const existingMonetag =
+          Math.max(
+            oldAd4,
+            storedMonetag
+          );
+
+        const count =
+          Math.min(
+            15,
+            existingMonetag + 1
+          );
+
+        patch.ad4Monetag =
+          count;
+
+        /*
+         * Keep old field synchronized.
+         */
+
+        patch.ad4 =
+          count;
+      }
+
+      else if (
+        mission === 4 &&
+        adProvider === "adsbitvex"
+      ) {
+        const oldAd4 =
+          Number(data.ad4 || 0);
+
+        const storedMonetag =
+          Number(
+            data.ad4Monetag || 0
+          );
+
+        /*
+         * Never treat AdsBitvex as Monetag.
+         */
+
+        const existingMonetag =
+          Math.max(
+            oldAd4,
+            storedMonetag
+          );
+
+        const count =
+          Math.min(
+            10,
+            Number(
+              data.ad4AdsBitvex || 0
+            ) + 1
+          );
+
+        patch.ad4AdsBitvex =
+          count;
+
+        /*
+         * Keep `ad4` as the Monetag
+         * compatibility field.
+         */
+
+        patch.ad4 =
+          Math.min(
+            15,
+            existingMonetag
+          );
+      }
+
+      /*
+       * KEY 4 COMPLETION CHECK
+       *
+       * 15 Monetag + 10 AdsBitvex
+       */
+
+      if (mission === 4) {
+        const existingMonetag =
+          Math.max(
+            Number(data.ad4 || 0),
+            Number(
+              data.ad4Monetag || 0
+            )
+          );
+
+        const monetag =
+          existingMonetag +
+          (
+            adProvider === "monetag"
+              ? 1
+              : 0
+          );
+
+        const bitvex =
+          Number(
+            data.ad4AdsBitvex || 0
+          ) +
+          (
+            adProvider === "adsbitvex"
+              ? 1
+              : 0
+          );
+
+        if (
+          monetag >= 15 &&
+          bitvex >= 10
+        ) {
+          patch.mission4 =
+            true;
+
+          patch.ad4Monetag =
+            Math.min(
+              15,
+              monetag
+            );
+
+          patch.ad4AdsBitvex =
+            Math.min(
+              10,
+              bitvex
+            );
+
+          patch.ad4 =
+            Math.min(
+              15,
+              monetag
+            );
+        }
+      }
+
+      transaction.update(
+        user,
+        patch
+      );
+    }
+  );
+
+  const state =
+    await stateFor(userId);
+
+  return {
+    count:
+      mission === 3
+        ? state.ad3
+        : state.ad4Monetag,
+
+    provider:
+      adProvider,
+
+    completed:
+      !!state[
+        `mission${mission}`
+      ],
+
+    state
+  };
 }
 
 async function sponsorInfo() {
   return {
-    address: process.env.SPONSOR_PAYMENT_ADDRESS ||
-      process.env.PAYOUT_WALLET_ADDRESS ||
+    address:
+      process.env
+        .SPONSOR_PAYMENT_ADDRESS ||
+      process.env
+        .PAYOUT_WALLET_ADDRESS ||
       DEFAULT_PAYOUT
   };
 }
 
-async function verifySponsorPayment(txHash) {
-  const destination = process.env.SPONSOR_PAYMENT_ADDRESS ||
-    process.env.PAYOUT_WALLET_ADDRESS ||
+async function verifySponsorPayment(
+  txHash
+) {
+  const destination =
+    process.env
+      .SPONSOR_PAYMENT_ADDRESS ||
+    process.env
+      .PAYOUT_WALLET_ADDRESS ||
     DEFAULT_PAYOUT;
 
-  if (!ethers.isAddress(destination)) throw new Error("Sponsor payment address is invalid.");
-  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) throw new Error("Enter a valid BSC transaction hash.");
-
-  const provider = new ethers.JsonRpcProvider(
-    process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org"
-  );
-  const transaction = await provider.getTransaction(txHash);
-  const receipt = await provider.getTransactionReceipt(txHash);
-
-  if (!transaction || !receipt || receipt.status !== 1) {
-    throw new Error("Transaction not found or not confirmed on BSC.");
-  }
-  if (String(transaction.chainId) !== "56") {
-    throw new Error("Sponsor payment must be on BSC mainnet.");
+  if (
+    !ethers.isAddress(
+      destination
+    )
+  ) {
+    throw new Error(
+      "Sponsor payment address is invalid."
+    );
   }
 
-  const iface = new ethers.Interface([
-    "event Transfer(address indexed from,address indexed to,uint256 value)"
-  ]);
-  const twoUsdt = ethers.parseUnits("2", 18);
+  if (
+    !/^0x[a-fA-F0-9]{64}$/.test(
+      txHash
+    )
+  ) {
+    throw new Error(
+      "Enter a valid BSC transaction hash."
+    );
+  }
+
+  const provider =
+    new ethers.JsonRpcProvider(
+      process.env.BSC_RPC_URL ||
+      "https://bsc-dataseed.binance.org"
+    );
+
+  const transaction =
+    await provider.getTransaction(
+      txHash
+    );
+
+  const receipt =
+    await provider.getTransactionReceipt(
+      txHash
+    );
+
+  if (
+    !transaction ||
+    !receipt ||
+    receipt.status !== 1
+  ) {
+    throw new Error(
+      "Transaction not found or not confirmed on BSC."
+    );
+  }
+
+  if (
+    String(transaction.chainId) !==
+    "56"
+  ) {
+    throw new Error(
+      "Sponsor payment must be on BSC mainnet."
+    );
+  }
+
+  const iface =
+    new ethers.Interface([
+      "event Transfer(address indexed from,address indexed to,uint256 value)"
+    ]);
+
+  const twoUsdt =
+    ethers.parseUnits(
+      "2",
+      18
+    );
+
   let matched = false;
 
-  for (const log of receipt.logs) {
-    if (log.address.toLowerCase() !== USDT_BSC.toLowerCase()) continue;
+  for (
+    const log of receipt.logs
+  ) {
+    if (
+      log.address.toLowerCase() !==
+      USDT_BSC.toLowerCase()
+    ) {
+      continue;
+    }
+
     try {
-      const parsed = iface.parseLog({ topics: log.topics, data: log.data });
+      const parsed =
+        iface.parseLog({
+          topics: log.topics,
+          data: log.data
+        });
+
       if (
         parsed &&
         parsed.name === "Transfer" &&
-        parsed.args.to.toLowerCase() === destination.toLowerCase() &&
-        parsed.args.value === twoUsdt
+        parsed.args.to.toLowerCase() ===
+          destination.toLowerCase() &&
+        parsed.args.value ===
+          twoUsdt
       ) {
         matched = true;
         break;
@@ -410,221 +1232,816 @@ async function verifySponsorPayment(txHash) {
     } catch (_) {}
   }
 
-  if (!matched) throw new Error("No confirmed 2 USDT payment to the sponsor address was found.");
+  if (!matched) {
+    throw new Error(
+      "No confirmed 2 USDT payment to the sponsor address was found."
+    );
+  }
+
   return true;
 }
 
-async function verifySponsorChannel(channel) {
-  const bot = await telegramCall("getMe");
-  const chat = await telegramCall("getChat", { chat_id: channel });
-  const member = await telegramCall("getChatMember", {
-    chat_id: chat.id,
-    user_id: bot.id
-  });
-  if (!["administrator","creator"].includes(member.status)) {
-    throw new Error("Instant USDT bot must be an administrator in that channel.");
+async function verifySponsorChannel(
+  channel
+) {
+  const bot =
+    await telegramCall(
+      "getMe"
+    );
+
+  const chat =
+    await telegramCall(
+      "getChat",
+      {
+        chat_id: channel
+      }
+    );
+
+  const member =
+    await telegramCall(
+      "getChatMember",
+      {
+        chat_id: chat.id,
+        user_id: bot.id
+      }
+    );
+
+  if (
+    ![
+      "administrator",
+      "creator"
+    ].includes(member.status)
+  ) {
+    throw new Error(
+      "Instant USDT bot must be an administrator in that channel."
+    );
   }
-  return { id: chat.id, username: channel };
+
+  return {
+    id: chat.id,
+    username: channel
+  };
 }
 
-async function sponsorSubmit(userId, txHash, channel) {
-  if (!channel) throw new Error("Enter the Telegram channel username.");
-  await verifySponsorPayment(txHash);
+async function sponsorSubmit(
+  userId,
+  txHash,
+  channel
+) {
+  if (!channel) {
+    throw new Error(
+      "Enter the Telegram channel username."
+    );
+  }
 
-  const used = await db().collection("sponsors")
-    .where("txHash", "==", txHash)
-    .limit(1)
-    .get();
-  if (!used.empty) throw new Error("This sponsor payment has already been used.");
+  await verifySponsorPayment(
+    txHash
+  );
 
-  const verified = await verifySponsorChannel(channel);
-  await db().collection("sponsors").doc(txHash).set({
-    uid: String(userId),
-    txHash,
-    channel,
-    chatId: String(verified.id),
-    status: "verified",
-    createdAt: admin.firestore.FieldValue.serverTimestamp()
-  });
+  const used =
+    await db()
+      .collection("sponsors")
+      .where(
+        "txHash",
+        "==",
+        txHash
+      )
+      .limit(1)
+      .get();
 
-  return "Sponsor payment and channel verified successfully.";
+  if (!used.empty) {
+    throw new Error(
+      "This sponsor payment has already been used."
+    );
+  }
+
+  const verified =
+    await verifySponsorChannel(
+      channel
+    );
+
+  await db()
+    .collection("sponsors")
+    .doc(txHash)
+    .set({
+      uid: String(userId),
+      txHash,
+      channel,
+      chatId: String(
+        verified.id
+      ),
+      status: "verified",
+      createdAt:
+        admin.firestore.FieldValue
+          .serverTimestamp()
+    });
+
+  return (
+    "Sponsor payment and channel verified successfully."
+  );
 }
 
 async function spin(uid) {
-  const ref = userRef(uid);
-  let newState;
-  await db().runTransaction(async transaction => {
-    const snap = await transaction.get(ref);
-    const data = snap.data() || {};
-    const complete = data.mission1 && data.mission2 && data.mission3 && data.mission4;
-    if (!complete) throw new Error("Collect all 4 keys first.");
-    if (data.spun) throw new Error("USDT Box already opened.");
-    transaction.update(ref, {
-      spun: true,
-      rewardAmount: "0.10",
-      rewardCreatedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-  });
-  newState = await stateFor(uid);
-  return newState;
+  const ref =
+    userRef(uid);
+
+  await db().runTransaction(
+    async transaction => {
+      const snap =
+        await transaction.get(
+          ref
+        );
+
+      const data =
+        snap.data() || {};
+
+      /*
+       * Also support old Key 4
+       * database values here.
+       */
+
+      const monetag =
+        Math.max(
+          Number(data.ad4 || 0),
+          Number(
+            data.ad4Monetag || 0
+          )
+        );
+
+      const bitvex =
+        Number(
+          data.ad4AdsBitvex || 0
+        );
+
+      const key4 =
+        !!data.mission4 ||
+        (
+          monetag >= 15 &&
+          bitvex >= 10
+        );
+
+      const complete =
+        !!data.mission1 &&
+        !!data.mission2 &&
+        !!data.mission3 &&
+        key4;
+
+      if (!complete) {
+        throw new Error(
+          "Collect all 4 keys first."
+        );
+      }
+
+      if (data.spun) {
+        throw new Error(
+          "USDT Box already opened."
+        );
+      }
+
+      transaction.update(
+        ref,
+        {
+          /*
+           * If Key 4 was completed
+           * by its counters, repair it
+           * before spinning.
+           */
+
+          mission4: true,
+
+          ad4Monetag:
+            Math.min(
+              15,
+              monetag
+            ),
+
+          ad4AdsBitvex:
+            Math.min(
+              10,
+              bitvex
+            ),
+
+          spun: true,
+
+          rewardAmount:
+            "0.10",
+
+          rewardCreatedAt:
+            admin.firestore.FieldValue
+              .serverTimestamp()
+        }
+      );
+    }
+  );
+
+  return await stateFor(uid);
 }
 
-async function payout(uid, wallet) {
-  if (!ethers.isAddress(wallet)) throw new Error("Enter a valid BEP-20 address.");
-
-  const state = await stateFor(uid);
-  if (!(state.mission1 && state.mission2 && state.mission3 && state.mission4)) {
-    throw new Error("Collect all 4 keys first.");
+async function payout(
+  uid,
+  wallet
+) {
+  if (
+    !ethers.isAddress(wallet)
+  ) {
+    throw new Error(
+      "Enter a valid BEP-20 address."
+    );
   }
-  if (!state.spun) throw new Error("Open the USDT Box first.");
 
-  const ref = userRef(uid);
-  const current = await ref.get();
-  const data = current.data() || {};
+  const state =
+    await stateFor(uid);
+
+  if (
+    !(
+      state.mission1 &&
+      state.mission2 &&
+      state.mission3 &&
+      state.mission4
+    )
+  ) {
+    throw new Error(
+      "Collect all 4 keys first."
+    );
+  }
+
+  if (!state.spun) {
+    throw new Error(
+      "Open the USDT Box first."
+    );
+  }
+
+  const ref =
+    userRef(uid);
+
+  const current =
+    await ref.get();
+
+  const data =
+    current.data() || {};
+
   if (data.withdrawn) {
-    const until = data.cooldownUntil && data.cooldownUntil.toMillis ? data.cooldownUntil.toMillis() : Number(data.cooldownUntil || 0);
-    if (until > Date.now()) throw new Error("Your next gift unlocks after the 24-hour countdown.");
-    throw new Error("This reward has already been withdrawn.");
+    const until =
+      data.cooldownUntil &&
+      data.cooldownUntil.toMillis
+        ? data.cooldownUntil.toMillis()
+        : Number(
+            data.cooldownUntil || 0
+          );
+
+    if (
+      until > Date.now()
+    ) {
+      throw new Error(
+        "Your next gift unlocks after the 24-hour countdown."
+      );
+    }
+
+    throw new Error(
+      "This reward has already been withdrawn."
+    );
   }
 
-  const privateKey = process.env.PRIVATE_KEY_WALLET;
-  if (!privateKey) throw new Error("Payout wallet is not configured.");
+  const privateKey =
+    process.env.PRIVATE_KEY_WALLET;
 
-  const expected = (process.env.PAYOUT_WALLET_ADDRESS || DEFAULT_PAYOUT).toLowerCase();
-  const provider = new ethers.JsonRpcProvider(
-    process.env.BSC_RPC_URL || "https://bsc-dataseed.binance.org"
-  );
-  const signer = new ethers.Wallet(privateKey, provider);
-
-  if (signer.address.toLowerCase() !== expected) {
-    throw new Error("Payout wallet key does not match PAYOUT_WALLET_ADDRESS.");
+  if (!privateKey) {
+    throw new Error(
+      "Payout wallet is not configured."
+    );
   }
 
-  const token = new ethers.Contract(
-    USDT_BSC,
-    ["function transfer(address to,uint256 amount) returns(bool)"],
-    signer
-  );
+  const expected =
+    (
+      process.env
+        .PAYOUT_WALLET_ADDRESS ||
+      DEFAULT_PAYOUT
+    ).toLowerCase();
 
-  const tx = await token.transfer(wallet, ethers.parseUnits("0.10", 18));
-  const cooldownUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const provider =
+    new ethers.JsonRpcProvider(
+      process.env.BSC_RPC_URL ||
+      "https://bsc-dataseed.binance.org"
+    );
+
+  const signer =
+    new ethers.Wallet(
+      privateKey,
+      provider
+    );
+
+  if (
+    signer.address.toLowerCase() !==
+    expected
+  ) {
+    throw new Error(
+      "Payout wallet key does not match PAYOUT_WALLET_ADDRESS."
+    );
+  }
+
+  const token =
+    new ethers.Contract(
+      USDT_BSC,
+      [
+        "function transfer(address to,uint256 amount) returns(bool)"
+      ],
+      signer
+    );
+
+  const tx =
+    await token.transfer(
+      wallet,
+      ethers.parseUnits(
+        "0.10",
+        18
+      )
+    );
+
+  const cooldownUntil =
+    new Date(
+      Date.now() +
+      24 * 60 * 60 * 1000
+    );
+
   await ref.update({
     withdrawn: true,
     payoutWallet: wallet,
     payoutTx: tx.hash,
     payoutStatus: "processing",
-    payoutAt: admin.firestore.FieldValue.serverTimestamp(),
-    cooldownUntil: admin.firestore.Timestamp.fromDate(cooldownUntil)
+    payoutAt:
+      admin.firestore.FieldValue
+        .serverTimestamp(),
+    cooldownUntil:
+      admin.firestore.Timestamp
+        .fromDate(
+          cooldownUntil
+        )
   });
 
   try {
     await tx.wait();
-    await ref.update({ payoutStatus: "paid" });
+
+    await ref.update({
+      payoutStatus: "paid"
+    });
   } catch (_) {}
 
   return tx.hash;
 }
 
-async function telegramStart(update) {
-  const message = update && update.message;
-  if (!message || message.chat?.type !== "private" || typeof message.text !== "string") return;
+async function telegramStart(
+  update
+) {
+  const message =
+    update &&
+    update.message;
 
-  if (message.text.startsWith("/start")) {
-    const payload = message.text.substring(6).trim();
-    const url = process.env.APP_URL || "https://instant-usdt.vercel.app";
-    await telegramCall("sendMessage", {
-      chat_id: message.chat.id,
-      text: `⚡ INSTANT USDT\n\n💎 Welcome to Instant USDT!\n\n🎯 Complete simple missions\n📺 Watch ads\n👥 Invite friends\n🎁 Unlock the Mystery Box\n💰 Earn USDT rewards\n\n━━━━━━━━━━━━━━━━━━\n🚀 HOW IT WORKS\n\n1️⃣ Complete Mission 1\n2️⃣ Invite 3 friends\n3️⃣ Complete the Treasure Hunt\n4️⃣ Win the Ad Battle\n5️⃣ 🎁 Unlock your Mystery Box\n6️⃣ 💳 Receive your reward\n\n━━━━━━━━━━━━━━━━━━\n\n🔐 Secure • Fast • Simple\n⚡ Start earning with Instant USDT today!\n\n👇 Tap the button below to enter`, 
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "🚀 Open Instant USDT", web_app: { url } }
-        ]]
+  if (
+    !message ||
+    message.chat?.type !==
+      "private" ||
+    typeof message.text !==
+      "string"
+  ) {
+    return;
+  }
+
+  if (
+    message.text.startsWith(
+      "/start"
+    )
+  ) {
+    const payload =
+      message.text
+        .substring(6)
+        .trim();
+
+    const url =
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "https://instant-usdt.vercel.app";
+
+    await telegramCall(
+      "sendMessage",
+      {
+        chat_id:
+          message.chat.id,
+
+        text:
+          `⚡ INSTANT USDT\n\n` +
+          `💎 Welcome to Instant USDT!\n\n` +
+          `🎯 Complete simple steps\n` +
+          `📺 Watch ads\n` +
+          `👥 Invite friends\n` +
+          `🔑 Collect 4 keys\n` +
+          `🎁 Open the USDT Box\n` +
+          `💰 Receive your USDT reward\n\n` +
+          `━━━━━━━━━━━━━━━━━━\n` +
+          `🚀 HOW IT WORKS\n\n` +
+          `1️⃣ Complete the first step\n` +
+          `2️⃣ Invite 3 friends\n` +
+          `3️⃣ Complete the third step\n` +
+          `4️⃣ Complete the fourth step\n` +
+          `5️⃣ 🔑 Collect all 4 keys\n` +
+          `6️⃣ 🎁 Open the USDT Box\n` +
+          `7️⃣ 💳 Receive your reward\n\n` +
+          `━━━━━━━━━━━━━━━━━━\n\n` +
+          `🔐 Secure • Fast • Simple\n` +
+          `⚡ Start earning with Instant USDT today!\n\n` +
+          `👇 Tap the button below to enter`,
+
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text:
+                  "🚀 Open Instant USDT",
+                web_app: {
+                  url
+                }
+              }
+            ]
+          ]
+        }
       }
-    });
+    );
   }
 }
 
-module.exports = async function(req, res) {
+module.exports = async function(
+  req,
+  res
+) {
   try {
-    if (req.method === "GET") {
-      return sendJson(res, 200, { ok: true, service: "Instant USDT" });
-    }
+    /*
+     * Health check
+     */
 
-    let body = req.body || {};
-    if (typeof body === "string") body = JSON.parse(body);
-
-    if (body.update_id !== undefined) {
-      await telegramStart(body);
-      return sendJson(res, 200, { ok: true });
-    }
-
-    const { user, params } = telegramVerify(body.initData || "");
-    const action = body.action;
-
-    if (action === "deviceCheck") {
-      const result = await deviceCheck(user.id, body.deviceId, body.fingerprint);
-      await ensureUser(user, params.get("start_param") || "");
-      return sendJson(res, 200, { ok: true, ...result, state: await stateFor(user.id) });
-    }
-
-    // Every normal app action also passes the device binding check.
-    await deviceCheck(user.id, body.deviceId, body.fingerprint);
-    await ensureUser(user, params.get("start_param") || "");
-
-    if (action === "config") {
-      return sendJson(res, 200, {
-        ok: true,
-        monetagSdkUrl: process.env.MONETAG_SDK_URL || "",
-        monetagZoneId: process.env.MONETAG_ZONE_ID || "",
-        adsgramBlockId: process.env.ADSGRAM_BLOCK_ID || ""
-      });
-    }
-
-    if (action === "state") {
-      return sendJson(res, 200, { ok: true, state: await stateFor(user.id) });
-    }
-
-    if (action === "verifyMission1") {
-      return sendJson(res, 200, await completeMission1(user.id));
-    }
-
-    if (action === "startAd") {
-      return sendJson(res, 200, { ok: true, session: await startAd(user.id, Number(body.mission), String(body.provider || "")) });
-    }
-
-    if (action === "completeAd") {
-      const result = await completeAd(user.id, String(body.session || ""), Number(body.mission), String(body.provider || ""));
-      return sendJson(res, 200, { ok: true, ...result });
-    }
-
-    if (action === "sponsorInfo") {
-      return sendJson(res, 200, { ok: true, ...(await sponsorInfo()) });
-    }
-
-    if (action === "sponsor") {
-      const message = await sponsorSubmit(
-        user.id,
-        String(body.txHash || "").trim(),
-        String(body.channel || "").trim()
+    if (
+      req.method === "GET"
+    ) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          service:
+            "instant-usdt-api"
+        }
       );
-      return sendJson(res, 200, { ok: true, message });
     }
 
-    if (action === "spin") {
-      return sendJson(res, 200, { ok: true, state: await spin(user.id) });
+    /*
+     * Parse body
+     */
+
+    let body =
+      req.body || {};
+
+    if (
+      typeof body ===
+      "string"
+    ) {
+      body =
+        JSON.parse(body);
     }
 
-    if (action === "withdraw") {
-      const tx = await payout(user.id, String(body.wallet || "").trim());
-      return sendJson(res, 200, {
-        ok: true,
-        message: `Payout sent successfully. Transaction: ${tx}`,
-        tx
-      });
+    /*
+     * Telegram webhook
+     */
+
+    if (
+      body.update_id !==
+      undefined
+    ) {
+      await telegramStart(
+        body
+      );
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true
+        }
+      );
     }
 
-    return sendJson(res, 400, { error: "Unknown action." });
+    /*
+     * Verify Telegram Mini App
+     */
+
+    const {
+      user,
+      params
+    } =
+      telegramVerify(
+        body.initData || ""
+      );
+
+    const action =
+      body.action;
+
+    /*
+     * Device check
+     */
+
+    if (
+      action ===
+      "deviceCheck"
+    ) {
+      const result =
+        await deviceCheck(
+          user.id,
+          body.deviceId,
+          body.fingerprint
+        );
+
+      await ensureUser(
+        user,
+        params.get(
+          "start_param"
+        ) || ""
+      );
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          ...result,
+          state:
+            await stateFor(
+              user.id
+            )
+        }
+      );
+    }
+
+    /*
+     * Every normal action
+     * must pass device check.
+     */
+
+    await deviceCheck(
+      user.id,
+      body.deviceId,
+      body.fingerprint
+    );
+
+    await ensureUser(
+      user,
+      params.get(
+        "start_param"
+      ) || ""
+    );
+
+    /*
+     * CONFIG
+     */
+
+    if (
+      action === "config"
+    ) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+
+          monetagSdkUrl:
+            process.env
+              .MONETAG_SDK_URL ||
+            "",
+
+          monetagZoneId:
+            process.env
+              .MONETAG_ZONE_ID ||
+            "",
+
+          adsgramBlockId:
+            process.env
+              .ADSGRAM_BLOCK_ID ||
+            ""
+        }
+      );
+    }
+
+    /*
+     * STATE
+     */
+
+    if (
+      action === "state"
+    ) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          state:
+            await stateFor(
+              user.id
+            )
+        }
+      );
+    }
+
+    /*
+     * KEY 1
+     */
+
+    if (
+      action ===
+      "verifyMission1"
+    ) {
+      return sendJson(
+        res,
+        200,
+        await completeMission1(
+          user.id
+        )
+      );
+    }
+
+    /*
+     * START AD
+     */
+
+    if (
+      action === "startAd"
+    ) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          session:
+            await startAd(
+              user.id,
+              Number(
+                body.mission
+              ),
+              String(
+                body.provider || ""
+              )
+            )
+        }
+      );
+    }
+
+    /*
+     * COMPLETE AD
+     */
+
+    if (
+      action ===
+      "completeAd"
+    ) {
+      const result =
+        await completeAd(
+          user.id,
+          String(
+            body.session || ""
+          ),
+          Number(
+            body.mission
+          ),
+          String(
+            body.provider || ""
+          )
+        );
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          ...result
+        }
+      );
+    }
+
+    /*
+     * SPONSOR INFO
+     */
+
+    if (
+      action ===
+      "sponsorInfo"
+    ) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          ...(
+            await sponsorInfo()
+          )
+        }
+      );
+    }
+
+    /*
+     * SPONSOR
+     */
+
+    if (
+      action === "sponsor"
+    ) {
+      const message =
+        await sponsorSubmit(
+          user.id,
+          String(
+            body.txHash || ""
+          ).trim(),
+          String(
+            body.channel || ""
+          ).trim()
+        );
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          message
+        }
+      );
+    }
+
+    /*
+     * SPIN USDT BOX
+     */
+
+    if (
+      action === "spin"
+    ) {
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          state:
+            await spin(
+              user.id
+            )
+        }
+      );
+    }
+
+    /*
+     * WITHDRAW
+     */
+
+    if (
+      action === "withdraw"
+    ) {
+      const tx =
+        await payout(
+          user.id,
+          String(
+            body.wallet || ""
+          ).trim()
+        );
+
+      return sendJson(
+        res,
+        200,
+        {
+          ok: true,
+
+          message:
+            `Payout sent successfully. Transaction: ${tx}`,
+
+          tx
+        }
+      );
+    }
+
+    return sendJson(
+      res,
+      400,
+      {
+        error:
+          "Unknown action."
+      }
+    );
+
   } catch (error) {
-    return sendJson(res, 400, { error: error.message || "Server error." });
+    console.error(
+      "Instant USDT API error:",
+      error
+    );
+
+    return sendJson(
+      res,
+      400,
+      {
+        error:
+          error.message ||
+          "Server error."
+      }
+    );
   }
 };
