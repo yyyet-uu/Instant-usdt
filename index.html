@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#030711">
+<title>Instant USDT</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://sdk.adsbitvex.com/functions/v1/ad-script?appid=000409"></script>
+
+<style>
+:root{--bg:#030711;--panel:#071226;--panel2:#091931;--line:#183b70;--blue:#087cff;--blue2:#42b3ff;--text:#f4f8ff;--muted:#8ca4c4;--green:#36e39a}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:Inter,Arial,sans-serif}
+body{background:radial-gradient(circle at 50% -10%,#006eff40,transparent 38%),linear-gradient(180deg,#030711,#040914 60%,#02040a)}
+button,input{font:inherit}.wrap{width:min(540px,100%);margin:auto;padding:18px 15px 42px}
+.glass{border:1px solid #1a3d721f;background:linear-gradient(145deg,#0a1830e8,#050b16f2);box-shadow:0 18px 55px #0008,inset 0 1px #ffffff08;border-radius:24px}
+.hero{padding:25px 21px}.brand{font-size:31px;font-weight:950;letter-spacing:-1.6px}.brand span{color:var(--blue2)}.sub{margin:8px 0 0;color:var(--muted);font-size:13px;line-height:1.55}
+.missions{display:grid;gap:12px;margin-top:16px}.mission{width:100%;border:1px solid var(--line);background:linear-gradient(145deg,#0a1a31,#06101f);color:var(--text);border-radius:20px;padding:18px;display:flex;align-items:center;gap:15px;text-align:left;cursor:pointer;box-shadow:0 10px 30px #0005;transition:.18s}.mission:active{transform:scale(.985)}.mission.locked{opacity:.55;cursor:not-allowed}.mission .num{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(145deg,#087cff,#0754ba);font-size:20px;font-weight:900;flex:0 0 48px;box-shadow:0 0 28px #087cff35}.mission .copy{flex:1}.mission b{font-size:18px}.mission small{display:block;margin-top:5px;color:#7f98b8}.lock{font-size:18px;color:#7d8fa9}.page{display:none}.page.active{display:block}.back{border:0;background:none;color:#77baff;padding:0 0 16px;font-size:15px;cursor:pointer}.title{margin-bottom:14px}.title .mini{color:#57a8ff;text-transform:uppercase;letter-spacing:.17em;font-size:9px;font-weight:900}.title h2{margin:5px 0 0;font-size:26px;letter-spacing:-.7px}.card{padding:18px}.row{display:flex;justify-content:space-between;align-items:center;gap:10px}.pill{padding:7px 10px;border-radius:999px;background:#0b2550;color:#7ec2ff;border:1px solid #24518a;font-size:11px;font-weight:800}.desc{color:var(--muted);font-size:13px;line-height:1.6}.channel{padding:15px;border-radius:16px;background:#071426;border:1px solid #1b3f73;margin:10px 0}.channel .label{font-size:10px;color:#66afff;letter-spacing:.13em;text-transform:uppercase;font-weight:900}.channel .name{margin-top:6px;font-weight:900}.btn{width:100%;padding:14px;border:0;border-radius:14px;background:linear-gradient(100deg,#087cff,#18a8ff);color:#fff;font-weight:900;font-size:13px;cursor:pointer;box-shadow:0 10px 30px #087cff33}.btn.secondary{background:#0b192d;border:1px solid #214a80;box-shadow:none;color:#8dc7ff}.btn+ .btn{margin-top:9px}.status{min-height:22px;margin-top:10px;color:#94a9c4;font-size:13px;line-height:1.5}.ok{color:var(--green)}.refbox{display:flex;gap:8px}.refbox input{flex:1}.refbox button{width:auto;padding-inline:16px}.input{width:100%;padding:14px;border-radius:14px;border:1px solid #254b7b;background:#040b15;color:#fff;outline:0;margin:7px 0 10px}.adcount{font-size:28px;font-weight:950;margin:11px 0;color:#77bdff}.sponsor-note{margin-top:12px;color:#7188a5;font-size:11px;line-height:1.55}.wheel{width:190px;height:190px;margin:25px auto 18px;border-radius:50%;display:grid;place-items:center;border:11px solid #087cff;background:radial-gradient(circle,#10284a,#06101f);box-shadow:0 0 55px #087cff55,0 0 0 8px #0b1b30}.wheel span{font-size:34px;font-weight:950}.center{text-align:center}.hide{display:none!important}.success{padding:12px;border-radius:14px;background:#062116;border:1px solid #0c5d3a;color:#51efa6;font-size:13px}.footer{text-align:center;color:#3d5472;font-size:10px;margin-top:24px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<section id="home" class="page active">
+  <div class="hero glass">
+    <div class="brand">⚡ <span>INSTANT</span> USDT</div>
+    <div class="sub">Complete the missions in order to unlock the Mystery Box.</div>
+  </div>
+  <div id="homeStatus" class="status"></div>
+  <div id="missions" class="missions"></div>
+  <div class="footer">Instant USDT • Telegram Mini App</div>
+</section>
+
+<section id="missionPage" class="page">
+  <button class="back" onclick="goHome()">← Back</button>
+  <div class="hero glass title"><div class="mini" id="missionLabel"></div><h2 id="missionTitle"></h2><p class="sub" id="missionDesc"></p></div>
+  <div id="missionBody" class="card glass"></div>
+  <button class="btn secondary" onclick="openSponsor()">＋ Add Sponsor</button>
+</section>
+
+<section id="sponsorPage" class="page">
+  <button class="back" onclick="backToMission()">← Back</button>
+  <div class="hero glass title"><div class="mini">SPONSOR</div><h2>Add Sponsor</h2><p class="sub">Pay the configured sponsorship fee, then submit your Telegram channel. The bot must be an administrator in the channel.</p></div>
+  <div class="card glass">
+    <p class="desc">Sponsorship fee: <b>$2 USDT</b></p>
+    <p class="desc">Payment address</p>
+    <div class="channel"><div class="name" id="sponsorAddress">Loading…</div></div>
+    <input id="sponsorTx" class="input" placeholder="BSC transaction hash">
+    <input id="sponsorChannel" class="input" placeholder="@your_channel">
+    <button class="btn" onclick="submitSponsor()">VERIFY PAYMENT & CHANNEL</button>
+    <div class="status" id="sponsorStatus"></div>
+  </div>
+</section>
+
+<section id="rewardPage" class="page">
+  <div class="hero glass center">
+    <div class="brand">🎁 Mystery Box</div>
+    <p class="sub">Your missions are complete.</p>
+    <div class="wheel"><span id="wheelValue">?</span></div>
+    <button id="spinBtn" class="btn" onclick="spin()">OPEN MYSTERY BOX</button>
+    <div id="withdrawBox" class="hide">
+      <p class="success">✓ Reward unlocked. Enter your BEP-20 address.</p>
+      <input id="wallet" class="input" placeholder="0x…">
+      <button class="btn" onclick="withdraw()">WITHDRAW</button>
+      <div class="status" id="withdrawStatus"></div>
+    </div>
+  </div>
+</section>
+
+</div>
+
+<script>
+const tg=window.Telegram?.WebApp;
+tg?.ready(); tg?.expand();
+const initData=tg?.initData||"";
+const APP_URL="https://instant-usdt.vercel.app";
+const DIRECT_APP="https://t.me/FastInstant_usdt_bot/Instant";
+let state={mission1:false,referrals:0,ads3:0,ads4:0,unlocked:false};
+let currentMission=0;
+
+const missionData=[
+ {title:"Mission One",desc:"Join the two required channels."},
+ {title:"Mission Two",desc:"Invite 3 people who each complete Mission One."},
+ {title:"Mission Three",desc:"Complete 50 AdsBitvex reward ads."},
+ {title:"Mission Four",desc:"Complete 50 AdsBitvex reward ads."}
+];
+
+function show(id){document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active")}
+function goHome(){show("home");renderHome()}
+function backToMission(){show("missionPage");openMission(currentMission)}
+function setStatus(id,text,ok=false){const e=document.getElementById(id);if(e){e.textContent=text;e.className=ok?"status ok":"status"}}
+
+async function api(action,data={}){
+ const r=await fetch("/api",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,initData,...data})});
+ const j=await r.json(); if(!r.ok&&!j.message)throw new Error("Request failed"); return j;
+}
+
+async function refresh(){
+ try{const x=await api("state");if(x.ok){state=x;renderHome();if(x.unlocked)show("rewardPage")}}
+ catch(e){setStatus("homeStatus",e.message||"Unable to load account.")}
+}
+
+function canOpen(n){
+ if(n===1)return true;
+ if(n===2)return state.mission1;
+ if(n===3)return state.mission1&&state.referrals>=3;
+ if(n===4)return state.mission1&&state.referrals>=3&&state.ads3>=50;
+ return false;
+}
+function done(n){
+ return n===1?state.mission1:n===2?state.referrals>=3:n===3?state.ads3>=50:state.ads4>=50;
+}
+function progress(n){
+ return n===1?(state.mission1?2:0)+"/2":n===2?Math.min(3,state.referrals)+"/3":n===3?Math.min(50,state.ads3)+"/50":Math.min(50,state.ads4)+"/50";
+}
+function renderHome(){
+ const box=document.getElementById("missions");box.innerHTML="";
+ for(let i=1;i<=4;i++){
+   const unlocked=canOpen(i),complete=done(i);
+   const b=document.createElement("button");b.className="mission"+(unlocked?"":" locked");
+   b.innerHTML='<span class="num">'+i+'</span><span class="copy"><b>'+missionData[i-1].title+'</b><small>'+ (complete?"Completed ✓":unlocked?"Tap to open":"Locked — complete previous mission") +'</small></span><span class="lock">'+(complete?"✓":unlocked?"›":"🔒")+'</span>';
+   if(unlocked)b.onclick=()=>openMission(i);
+   box.appendChild(b);
+ }
+ if(state.unlocked && !document.getElementById("rewardPage").classList.contains("active")) show("rewardPage");
+}
+
+async function openMission(n){
+ if(!canOpen(n))return;
+ currentMission=n;show("missionPage");
+ missionLabel.textContent="MISSION "+n;missionTitle.textContent=missionData[n-1].title;missionDesc.textContent=missionData[n-1].desc;
+ const b=document.getElementById("missionBody");
+ if(n===1){
+   b.innerHTML='<h3>Required Channels</h3>'+
+    '<div class="channel"><div class="label">Channel</div><div class="name">@phone_teach</div><button class="btn secondary" onclick="openChannel(\\'https://t.me/phone_teach\\')">OPEN CHANNEL</button></div>'+
+    '<div class="channel"><div class="label">Channel</div><div class="name">@forex_big</div><button class="btn secondary" onclick="openChannel(\\'https://t.me/forex_big\\')">OPEN CHANNEL</button></div>'+
+    '<button class="btn" onclick="verifyMission1()">VERIFY</button><div class="status" id="missionStatus"></div>';
+ }
+ if(n===2){
+   b.innerHTML='<h3>Invite 3 People</h3><p class="desc">Important: a referral counts only after the invited user completes Mission One.</p><div class="refbox"><input id="refLink" class="input" readonly><button class="btn secondary" onclick="copyRef()">COPY</button></div><div class="status" id="missionStatus"></div>';
+   const x=await api("state");refLink.value=DIRECT_APP+"?startapp=ref_"+x.userId;setStatus("missionStatus","Qualified referrals: "+x.referrals+" / 3",x.referrals>=3);
+ }
+ if(n===3||n===4){
+   b.innerHTML='<h3>AdsBitvex</h3><p class="desc">Complete 50 reward ads. App ID: <b>000409</b></p><div class="adcount" id="adCount">'+(n===3?state.ads3:state.ads4)+' / 50</div><button class="btn" onclick="watchAd()">WATCH AD</button><div class="status" id="missionStatus"></div>';
+ }
+}
+function openChannel(url){if(tg?.openTelegramLink)tg.openTelegramLink(url);else location.href=url}
+async function verifyMission1(){
+ setStatus("missionStatus","Checking Telegram membership…");
+ try{const x=await api("verifyMission1");setStatus("missionStatus",x.message||"",x.ok);if(x.ok){await refresh();setTimeout(()=>openMission(2),600)}}
+ catch(e){setStatus("missionStatus",e.message||"Verification failed.")}
+}
+async function copyRef(){await navigator.clipboard.writeText(document.getElementById("refLink").value);setStatus("missionStatus","Invite link copied.",true)}
+async function watchAd(){
+ setStatus("missionStatus","Preparing ad…");
+ try{
+   const start=await api("adStart",{mission:currentMission});
+   if(!start.ok)throw Error(start.message||"Unable to start ad.");
+   if(typeof window.showadsbitvex!=="function")throw Error("AdsBitvex is not available. Try again.");
+   await window.showadsbitvex();
+   const x=await api("adComplete",{mission:currentMission,session:start.session});
+   if(!x.ok)throw Error(x.message||"Ad verification failed.");
+   adCount.textContent=x.count+" / 50";setStatus("missionStatus",x.message,true);
+   await refresh();
+   if(x.missionComplete){setTimeout(()=>openMission(currentMission+1),650)}
+ }catch(e){setStatus("missionStatus",e.message||"No ad available.")}
+}
+function openSponsor(){
+ sponsorAddress.textContent="Loading…";show("sponsorPage");
+ api("sponsorInfo").then(x=>{if(x.address)sponsorAddress.textContent=x.address}).catch(()=>{});
+}
+async function submitSponsor(){
+ const tx=document.getElementById("sponsorTx").value.trim(),ch=document.getElementById("sponsorChannel").value.trim();
+ setStatus("sponsorStatus","Verifying payment and channel…");
+ try{const x=await api("sponsorSubmit",{txHash:tx,channel:ch});setStatus("sponsorStatus",x.message||"",x.ok)}catch(e){setStatus("sponsorStatus",e.message||"Sponsor verification failed.")}
+}
+function spin(){
+ document.getElementById("spinBtn").disabled=true;const w=document.getElementById("wheelValue");
+ const vals=["0.05","0.20","0.50","0.01","0.30","0.10"];let i=0;
+ const timer=setInterval(()=>{w.textContent=vals[i++%vals.length]},70);
+ setTimeout(()=>{clearInterval(timer);w.textContent="0.10";document.getElementById("withdrawBox").classList.remove("hide")},2800);
+}
+async function withdraw(){
+ const wallet=document.getElementById("wallet").value.trim();setStatus("withdrawStatus","Processing…");
+ try{const x=await api("withdraw",{wallet});setStatus("withdrawStatus",x.message||"",x.ok)}catch(e){setStatus("withdrawStatus",e.message||"Withdrawal failed.")}
+}
+
+refresh();
+</script>
+</body></html>
