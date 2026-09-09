@@ -1,0 +1,9 @@
+{
+  "name": "instant-usdt",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "firebase-admin": "^13.5.0"
+  }
+}
